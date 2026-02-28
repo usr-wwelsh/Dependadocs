@@ -70,6 +70,11 @@ def _handle_pull_request(event: dict, repo, docs_path: str) -> None:
     pr_number: int = pull_request["number"]
     base_ref: str = pull_request["base"]["ref"]
     trigger_pr_url: str = pull_request.get("html_url", "")
+    head_ref: str = pull_request.get("head", {}).get("ref", "")
+
+    if head_ref.startswith("dependadocs/"):
+        print("[dependadocs] PR is from a Dependadocs branch — skipping to avoid loops.")
+        sys.exit(0)
 
     print(f"[dependadocs] Processing PR #{pr_number} (base: {base_ref})")
 

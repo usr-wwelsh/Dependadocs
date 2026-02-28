@@ -97,6 +97,21 @@ class TestMainPullRequest:
         assert exc_info.value.code == 0
         mock_create.assert_not_called()
 
+    def test_skips_dependadocs_own_prs(self, tmp_path):
+        event = _make_pr_event()
+        event["pull_request"]["head"] = {"ref": "dependadocs/pr-5"}
+        event_path = _write_event(str(tmp_path), event)
+        env = {**BASE_ENV, "GITHUB_EVENT_PATH": event_path}
+
+        with patch.dict(os.environ, env):
+            with patch("main.github_client.get_github_client", return_value=MagicMock()):
+                with patch("main.github_client.get_pr_diff") as mock_diff:
+                    with pytest.raises(SystemExit) as exc_info:
+                        main.main()
+
+        assert exc_info.value.code == 0
+        mock_diff.assert_not_called()
+
     def test_exits_cleanly_when_empty_diff(self, tmp_path):
         event_path = _write_event(str(tmp_path), _make_pr_event())
         env = {**BASE_ENV, "GITHUB_EVENT_PATH": event_path}
