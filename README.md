@@ -70,6 +70,7 @@ That's it. The next time someone opens a PR, Dependadocs will run.
 | `gemini-api-key` | Yes | — | Your Gemini API key |
 | `docs-path` | No | `""` (whole repo) | Restrict doc discovery to a subdirectory, e.g. `"docs/"` |
 | `github-token` | No | `${{ github.token }}` | Override the default GitHub token |
+| `lookback-days` | No | `7` | Number of days of commits to diff on scheduled/manual runs |
 
 ---
 
