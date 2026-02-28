@@ -5,7 +5,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 from github import GithubException
 
 import github_client
@@ -107,9 +107,8 @@ class TestGetScheduledDiff:
         branch.commit.sha = "head_sha_7654321"
         repo.get_branch.return_value = branch
 
-        with MagicMock() as mock_diff:
-            github_client.get_commit_diff = MagicMock(return_value="some diff")
-            diff, head_sha = github_client.get_scheduled_diff(repo, "main")
+        github_client.get_commit_diff = MagicMock(return_value="some diff")
+        diff, head_sha = github_client.get_scheduled_diff(repo, "main")
 
         assert head_sha == "head_sha_7654321"
         github_client.get_commit_diff.assert_called_once_with(
