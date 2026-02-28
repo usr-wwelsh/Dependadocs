@@ -91,6 +91,8 @@ Rules:
 - Do NOT fix typos, grammar, or style issues.
 - Do NOT flag docs that are still accurate.
 - If a doc file needs updating, return its **complete updated content** (not a diff).
+  Preserve the exact file structure: every blank line, every newline, every heading.
+  The `updated_content` field must be the full file exactly as it should be written to disk.
 - Be conservative — when in doubt, omit. A false negative is better than a false positive.
 - If no docs need updating, set updates_needed to false and return an empty changes array.
 
@@ -118,7 +120,7 @@ def _parse_response(text: str) -> AnalysisResult:
         FileChange(
             file=c["file"],
             reason=c["reason"],
-            updated_content=c["updated_content"],
+            updated_content=c["updated_content"].replace("\\n", "\n"),
         )
         for c in data.get("changes", [])
     ]
