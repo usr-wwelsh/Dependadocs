@@ -14,6 +14,10 @@ inputs:
     description: GitHub token with contents:write and pull-requests:write
     required: false
     default: ${{ github.token }}
+  lookback-days:
+    description: Number of days of commits to diff on scheduled/manual runs
+    required: false
+    default: "7"
 
 runs:
   using: composite
@@ -36,4 +40,5 @@ runs:
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
         GITHUB_EVENT_PATH: ${{ github.event_path }}
+        LOOKBACK_DAYS: ${{ inputs.lookback-days }}
       run: python ${{ github.action_path }}/src/main.py

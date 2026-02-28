@@ -96,95 +96,46 @@ class TestGetCommitDiff:
 
 
 class TestGetScheduledDiff:
-    def test_uses_existing_tag_as_base(self):
+    def test_diffs_commits_in_lookback_window(self):
         repo = MagicMock()
-        tag_ref = MagicMock()
-        tag_ref.object.sha = "tag_sha_1234567"
-        tag_ref.object.type = "commit"
-        repo.get_git_ref.return_value = tag_ref
-
-        branch = MagicMock()
-        branch.commit.sha = "head_sha_7654321"
-        repo.get_branch.return_value = branch
-
-        github_client.get_commit_diff = MagicMock(return_value="some diff")
-        diff, head_sha = github_client.get_scheduled_diff(repo, "main")
-
-        assert head_sha == "head_sha_7654321"
-        github_client.get_commit_diff.assert_called_once_with(
-            repo, "tag_sha_1234567", "head_sha_7654321"
-        )
-
-    def test_falls_back_to_last_50_commits_when_no_tag(self):
-        repo = MagicMock()
-        repo.get_git_ref.side_effect = GithubException(404, "not found")
-
         branch = MagicMock()
         branch.commit.sha = "head_sha"
         repo.get_branch.return_value = branch
 
-        commits = [MagicMock() for _ in range(10)]
+        commits = [MagicMock() for _ in range(5)]
         for i, c in enumerate(commits):
             c.sha = f"sha_{i:04d}"
         repo.get_commits.return_value = commits
 
-        github_client.get_commit_diff = MagicMock(return_value="fallback diff")
-        diff, head_sha = github_client.get_scheduled_diff(repo, "main")
+        github_client.get_commit_diff = MagicMock(return_value="some diff")
+        diff, head_sha = github_client.get_scheduled_diff(repo, "main", lookback_days=7)
 
         assert head_sha == "head_sha"
-        # Should use the oldest of the 10 commits as base
-        github_client.get_commit_diff.assert_called_once_with(repo, commits[9].sha, "head_sha")
+        github_client.get_commit_diff.assert_called_once_with(repo, commits[4].sha, "head_sha")
 
-    def test_returns_empty_diff_when_no_new_commits(self):
+    def test_returns_empty_when_no_commits_in_window(self):
         repo = MagicMock()
-        tag_ref = MagicMock()
-        tag_ref.object.sha = "same_sha"
-        tag_ref.object.type = "commit"
-        repo.get_git_ref.return_value = tag_ref
-
         branch = MagicMock()
-        branch.commit.sha = "same_sha"
+        branch.commit.sha = "head_sha"
         repo.get_branch.return_value = branch
+        repo.get_commits.return_value = []
 
-        diff, head_sha = github_client.get_scheduled_diff(repo, "main")
+        diff, head_sha = github_client.get_scheduled_diff(repo, "main", lookback_days=7)
         assert diff == ""
-        assert head_sha == "same_sha"
+        assert head_sha == "head_sha"
 
-    def test_returns_empty_when_fewer_than_two_commits(self):
+    def test_respects_lookback_days_param(self):
         repo = MagicMock()
-        repo.get_git_ref.side_effect = GithubException(404, "not found")
-
         branch = MagicMock()
-        branch.commit.sha = "only_sha"
+        branch.commit.sha = "head_sha"
         repo.get_branch.return_value = branch
+        repo.get_commits.return_value = []
 
-        single_commit = MagicMock()
-        single_commit.sha = "only_sha"
-        repo.get_commits.return_value = [single_commit]
+        github_client.get_scheduled_diff(repo, "main", lookback_days=30)
 
-        diff, head_sha = github_client.get_scheduled_diff(repo, "main")
-        assert diff == ""
-
-
-class TestUpdateLastRunTag:
-    def test_creates_tag_when_missing(self):
-        repo = MagicMock()
-        repo.get_git_ref.side_effect = GithubException(404, "not found")
-
-        github_client.update_last_run_tag(repo, "abc1234")
-
-        repo.create_git_ref.assert_called_once_with(
-            ref="refs/tags/dependadocs-last-run", sha="abc1234"
-        )
-
-    def test_updates_existing_tag(self):
-        repo = MagicMock()
-        ref = MagicMock()
-        repo.get_git_ref.return_value = ref
-
-        github_client.update_last_run_tag(repo, "newsha")
-
-        ref.edit.assert_called_once_with(sha="newsha", force=True)
+        call_kwargs = repo.get_commits.call_args.kwargs
+        assert call_kwargs["sha"] == "main"
+        assert "since" in call_kwargs
 
 
 class TestEnsureBranch:

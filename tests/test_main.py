@@ -187,18 +187,16 @@ class TestMainScheduled:
         with patch.dict(os.environ, env):
             with patch("main.github_client.get_github_client", return_value=mock_gh):
                 with patch("main.github_client.get_scheduled_diff", return_value=("some diff", "abc1234")) as mock_diff:
-                    with patch("main.github_client.update_last_run_tag") as mock_tag:
-                        with patch("main.find_docs", return_value=[]):
-                            with patch("main.gemini_client.analyze", return_value=result):
-                                with patch("main.github_client.create_doc_pr", return_value="https://github.com/owner/repo/pull/10") as mock_create:
-                                    main.main()
+                    with patch("main.find_docs", return_value=[]):
+                        with patch("main.gemini_client.analyze", return_value=result):
+                            with patch("main.github_client.create_doc_pr", return_value="https://github.com/owner/repo/pull/10") as mock_create:
+                                main.main()
 
         mock_diff.assert_called_once()
-        mock_tag.assert_called_once_with(mock_repo, "abc1234")
         mock_create.assert_called_once()
         assert "scheduled-" in mock_create.call_args.kwargs["branch_suffix"]
 
-    def test_updates_tag_even_when_no_diff(self, tmp_path):
+    def test_exits_cleanly_when_no_diff(self, tmp_path):
         event_path = _write_event(str(tmp_path), _make_schedule_event())
         env = {**BASE_ENV, "GITHUB_EVENT_NAME": "schedule", "GITHUB_EVENT_PATH": event_path}
 
@@ -210,12 +208,10 @@ class TestMainScheduled:
         with patch.dict(os.environ, env):
             with patch("main.github_client.get_github_client", return_value=mock_gh):
                 with patch("main.github_client.get_scheduled_diff", return_value=("", "abc1234")):
-                    with patch("main.github_client.update_last_run_tag") as mock_tag:
-                        with pytest.raises(SystemExit) as exc_info:
-                            main.main()
+                    with pytest.raises(SystemExit) as exc_info:
+                        main.main()
 
         assert exc_info.value.code == 0
-        mock_tag.assert_called_once_with(mock_repo, "abc1234")
 
     def test_workflow_dispatch_routes_to_scheduled(self, tmp_path):
         event_path = _write_event(str(tmp_path), _make_schedule_event())
@@ -229,9 +225,8 @@ class TestMainScheduled:
         with patch.dict(os.environ, env):
             with patch("main.github_client.get_github_client", return_value=mock_gh):
                 with patch("main.github_client.get_scheduled_diff", return_value=("", "abc1234")) as mock_diff:
-                    with patch("main.github_client.update_last_run_tag"):
-                        with pytest.raises(SystemExit):
-                            main.main()
+                    with pytest.raises(SystemExit):
+                        main.main()
 
         mock_diff.assert_called_once()
 

@@ -13,7 +13,6 @@ from gemini_client import FileChange
 
 BRANCH_PREFIX = "dependadocs/"
 PR_LABEL = "documentation"
-LAST_RUN_TAG = "dependadocs-last-run"
 MAX_DIFF_BYTES = 512 * 1024  # 512 KB
 
 
@@ -67,48 +66,29 @@ def get_commit_diff(repo: "Repository", base_sha: str, head_sha: str) -> str:
     return "\n".join(parts)
 
 
-def get_scheduled_diff(repo: "Repository", default_branch: str) -> tuple[str, str]:
+def get_scheduled_diff(repo: "Repository", default_branch: str, lookback_days: int = 7) -> tuple[str, str]:
     """Return (diff, head_sha) for a scheduled or manual run.
 
-    Uses the 'dependadocs-last-run' tag as the base if it exists,
-    otherwise falls back to the oldest of the last 50 commits.
+    Diffs commits from the last `lookback_days` days against HEAD.
     """
+    import datetime
+
     head_sha = repo.get_branch(default_branch).commit.sha
+    since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=lookback_days)
 
-    try:
-        tag_ref = repo.get_git_ref(f"tags/{LAST_RUN_TAG}")
-        base_sha = tag_ref.object.sha
-        # Dereference annotated tags to their commit SHA
-        if tag_ref.object.type == "tag":
-            tag_obj = repo.get_git_tag(base_sha)
-            base_sha = tag_obj.object.sha
-        print(f"[dependadocs] Diffing from last run ({base_sha[:7]}) to HEAD ({head_sha[:7]}).")
-    except GithubException:
-        print("[dependadocs] No 'dependadocs-last-run' tag found. Comparing last 50 commits.")
-        commits = list(repo.get_commits(sha=default_branch))
-        if len(commits) < 2:
-            print("[dependadocs] Not enough commits to diff.")
-            return "", head_sha
-        base_sha = commits[min(49, len(commits) - 1)].sha
-
-    if base_sha == head_sha:
-        print("[dependadocs] No new commits since last run.")
+    commits = list(repo.get_commits(sha=default_branch, since=since))
+    if not commits:
+        print(f"[dependadocs] No commits in the last {lookback_days} day(s).")
         return "", head_sha
+
+    base_sha = commits[-1].sha  # oldest commit in the window
+    print(
+        f"[dependadocs] Diffing last {lookback_days} day(s): "
+        f"{base_sha[:7]}..{head_sha[:7]} ({len(commits)} commit(s))."
+    )
 
     diff = get_commit_diff(repo, base_sha, head_sha)
     return diff, head_sha
-
-
-def update_last_run_tag(repo: "Repository", sha: str) -> None:
-    """Create or update the 'dependadocs-last-run' lightweight tag."""
-    ref_path = f"refs/tags/{LAST_RUN_TAG}"
-    try:
-        ref = repo.get_git_ref(f"tags/{LAST_RUN_TAG}")
-        ref.edit(sha=sha, force=True)
-        print(f"[dependadocs] Updated '{LAST_RUN_TAG}' tag to {sha[:7]}.")
-    except GithubException:
-        repo.create_git_ref(ref=ref_path, sha=sha)
-        print(f"[dependadocs] Created '{LAST_RUN_TAG}' tag at {sha[:7]}.")
 
 
 def create_doc_pr(

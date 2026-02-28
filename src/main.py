@@ -42,6 +42,7 @@ def main() -> None:
         _die("GEMINI_API_KEY is not set.")
 
     docs_path = os.environ.get("DOCS_PATH", "").strip()
+    lookback_days = int(os.environ.get("LOOKBACK_DAYS", "7"))
 
     # ── Initialise GitHub client ──────────────────────────────────────────
     gh = github_client.get_github_client(token)
@@ -53,7 +54,7 @@ def main() -> None:
     elif event_name == "push":
         _handle_push(event, repo, docs_path)
     elif event_name in ("schedule", "workflow_dispatch"):
-        _handle_scheduled(repo, docs_path)
+        _handle_scheduled(repo, docs_path, lookback_days)
     else:
         _die(
             f"Unsupported event type: '{event_name}'. "
@@ -137,14 +138,11 @@ def _handle_push(event: dict, repo, docs_path: str) -> None:
     print(f"[dependadocs] Documentation PR opened: {pr_url}")
 
 
-def _handle_scheduled(repo, docs_path: str) -> None:
+def _handle_scheduled(repo, docs_path: str, lookback_days: int = 7) -> None:
     default_branch = repo.default_branch
     print(f"[dependadocs] Scheduled/manual run on {default_branch}")
 
-    diff, head_sha = github_client.get_scheduled_diff(repo, default_branch)
-
-    # Always advance the tag so the next run doesn't reprocess the same commits
-    github_client.update_last_run_tag(repo, head_sha)
+    diff, head_sha = github_client.get_scheduled_diff(repo, default_branch, lookback_days)
 
     if not diff.strip():
         print("[dependadocs] No changes since last run. Exiting.")
