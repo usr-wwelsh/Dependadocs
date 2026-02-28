@@ -12,7 +12,7 @@
 ## How it works
 
 ```
-Your PR opened/updated
+Your PR opened/updated, or on schedule, or manually triggered
   → fetch diff via GitHub API
   → discover .md / .rst / .txt files in your repo
   → send diff + docs to Gemini 2.5 Flash
@@ -41,6 +41,9 @@ Value: your key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 on:
   pull_request:
     types: [opened, synchronize]
+  schedule:
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -51,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: wwelsh/dependadocs@v1
+      - uses: usr-wwelsh/dependadocs@main
         with:
           gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
 ```
