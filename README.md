@@ -59,6 +59,12 @@ jobs:
           gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
 ```
 
+### 3. Allow Actions to open pull requests
+
+In your repo: **Settings → Actions → General → Workflow permissions**
+
+Enable **"Allow GitHub Actions to create and approve pull requests"**.
+
 That's it. The next time someone opens a PR, Dependadocs will run.
 
 ---
