@@ -1,0 +1,39 @@
+name: Dependadocs
+description: AI-powered documentation updater. Opens a PR with doc updates when code changes affect your docs.
+author: wwelsh
+
+inputs:
+  gemini-api-key:
+    description: Gemini API key (BYOK — free tier works)
+    required: true
+  docs-path:
+    description: Restrict doc discovery to this subdirectory (e.g. "docs/"). Leave empty to scan the whole repo.
+    required: false
+    default: ""
+  github-token:
+    description: GitHub token with contents:write and pull-requests:write
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install dependencies
+      shell: bash
+      run: pip install -r ${{ github.action_path }}/requirements.txt
+
+    - name: Run Dependadocs
+      shell: bash
+      env:
+        GEMINI_API_KEY: ${{ inputs.gemini-api-key }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        DOCS_PATH: ${{ inputs.docs-path }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_EVENT_PATH: ${{ github.event_path }}
+      run: python ${{ github.action_path }}/src/main.py
