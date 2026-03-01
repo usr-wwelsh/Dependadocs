@@ -93,9 +93,18 @@ It is explicitly told to **ignore** typos, grammar, and style improvements.
 
 ---
 
-## Limits
+## Ignoring files
 
-To stay within Gemini's context window, Dependadocs caps discovery at **30 files** or **200 KB** of doc content, whichever comes first. If your repo is larger, set `docs-path` to point at the relevant subdirectory.
+You can exclude files from Dependadocs by creating a `.docignorre` file in your repo root. Each line is a glob pattern — files matching any pattern will be skipped.
+
+```
+# Example .docignore
+CHANGELOG.md
+docs/internal/*
+*.generated.md
+```
+
+Note: directory exlcusions use a trailing `*` wildcard (e.g. `ADR/*`).
 
 ---
 

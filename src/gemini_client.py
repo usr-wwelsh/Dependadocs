@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from google import genai
 from google.genai import types
 
-MODEL = "gemini-3.1-pro-preview"
+MODEL = "gemini-2.5-flash"
 
 RESPONSE_SCHEMA = {
     "type": "OBJECT",
