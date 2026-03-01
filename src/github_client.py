@@ -108,8 +108,10 @@ def create_doc_pr(
     base_sha = repo.get_branch(base_ref).commit.sha
     _ensure_branch(repo, branch_name, base_sha)
 
-    for change in changes:
-        _upsert_file(repo, branch_name, change)
+    files_written = sum(1 for change in changes if _upsert_file(repo, branch_name, change))
+    if files_written == 0:
+        print("[dependadocs] No files changed after comparing content — skipping PR creation.")
+        return ""
 
     body_lines = [
         "## Documentation update",
@@ -152,8 +154,11 @@ def _ensure_branch(repo: "Repository", branch_name: str, base_sha: str) -> None:
         print(f"[dependadocs] Created branch '{branch_name}' at {base_sha[:7]}.")
 
 
-def _upsert_file(repo: "Repository", branch: str, change: FileChange) -> None:
-    """Create or update a file on the given branch."""
+def _upsert_file(repo: "Repository", branch: str, change: FileChange) -> bool:
+    """Create or update a file on the given branch.
+
+    Returns True if the file was written, False if content was unchanged.
+    """
     content_bytes = change.updated_content.encode("utf-8")
     message = f"docs: update {change.file} ({change.reason[:72]})"
 
@@ -161,6 +166,9 @@ def _upsert_file(repo: "Repository", branch: str, change: FileChange) -> None:
         existing = repo.get_contents(change.file, ref=branch)
         if isinstance(existing, list):
             existing = existing[0]
+        if existing.decoded_content == content_bytes:
+            print(f"[dependadocs] Skipped {change.file} (content unchanged).")
+            return False
         repo.update_file(
             path=change.file,
             message=message,
@@ -177,6 +185,7 @@ def _upsert_file(repo: "Repository", branch: str, change: FileChange) -> None:
             branch=branch,
         )
         print(f"[dependadocs] Created {change.file}.")
+    return True
 
 
 def _ensure_label(repo: "Repository", name: str, color: str, description: str) -> None:

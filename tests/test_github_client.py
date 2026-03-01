@@ -167,8 +167,9 @@ class TestUpsertFile:
         repo.get_contents.return_value = existing
 
         change = FileChange(file="README.md", reason="updated API name", updated_content="# New")
-        github_client._upsert_file(repo, "dependadocs/pr-1", change)
+        result = github_client._upsert_file(repo, "dependadocs/pr-1", change)
 
+        assert result is True
         repo.update_file.assert_called_once()
         call_kwargs = repo.update_file.call_args
         assert call_kwargs.kwargs["path"] == "README.md" or call_kwargs.args[0] == "README.md"
@@ -178,9 +179,23 @@ class TestUpsertFile:
         repo.get_contents.side_effect = GithubException(404, "not found")
 
         change = FileChange(file="docs/new.md", reason="new page", updated_content="# New Page")
-        github_client._upsert_file(repo, "dependadocs/pr-1", change)
+        result = github_client._upsert_file(repo, "dependadocs/pr-1", change)
 
+        assert result is True
         repo.create_file.assert_called_once()
+
+    def test_skips_unchanged_content(self):
+        repo = MagicMock()
+        existing = MagicMock()
+        existing.sha = "oldsha"
+        existing.decoded_content = b"# Same"
+        repo.get_contents.return_value = existing
+
+        change = FileChange(file="README.md", reason="no change", updated_content="# Same")
+        result = github_client._upsert_file(repo, "dependadocs/pr-1", change)
+
+        assert result is False
+        repo.update_file.assert_not_called()
 
 
 class TestCreateDocPr:
@@ -244,3 +259,28 @@ class TestCreateDocPr:
         call_kwargs = repo.create_pull.call_args.kwargs
         assert call_kwargs["head"] == "dependadocs/scheduled-2026-02-27"
         assert "2026-02-27" in call_kwargs["title"]
+
+    def test_returns_empty_string_when_all_content_unchanged(self):
+        repo = MagicMock()
+        branch_obj = MagicMock()
+        branch_obj.commit.sha = "base_sha"
+        repo.get_branch.return_value = branch_obj
+        repo.get_git_ref.side_effect = GithubException(404, "not found")
+
+        existing = MagicMock()
+        existing.sha = "filsha"
+        existing.decoded_content = b"# Unchanged"
+        repo.get_contents.return_value = existing
+
+        changes = [FileChange(file="README.md", reason="no change", updated_content="# Unchanged")]
+        url = github_client.create_doc_pr(
+            repo=repo,
+            base_ref="main",
+            changes=changes,
+            branch_suffix="pr-99",
+            pr_title="docs: update",
+            trigger_description="in response to PR #99",
+        )
+
+        assert url == ""
+        repo.create_pull.assert_not_called()

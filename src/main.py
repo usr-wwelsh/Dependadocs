@@ -186,7 +186,7 @@ def _analyze(diff: str, docs: list[dict]):
 def _create_pr(repo, base_ref, changes, branch_suffix, pr_title, trigger_description):
     print("[dependadocs] Creating documentation PR…")
     try:
-        return github_client.create_doc_pr(
+        pr_url = github_client.create_doc_pr(
             repo=repo,
             base_ref=base_ref,
             changes=changes,
@@ -196,6 +196,10 @@ def _create_pr(repo, base_ref, changes, branch_suffix, pr_title, trigger_descrip
         )
     except Exception as exc:
         _die(f"Failed to create doc PR: {exc}")
+    if not pr_url:
+        print("[dependadocs] No content changed — skipping PR.")
+        sys.exit(0)
+    return pr_url
 
 
 def _log_changes(changes) -> None:
