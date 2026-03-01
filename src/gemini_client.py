@@ -66,6 +66,7 @@ def analyze(diff: str, docs: list[dict]) -> AnalysisResult:
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=RESPONSE_SCHEMA,
+            max_output_tokens=16384,
         ),
     )
 
