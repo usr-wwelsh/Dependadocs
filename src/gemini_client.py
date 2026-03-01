@@ -87,9 +87,12 @@ def _build_prompt(diff: str, docs: list[dict]) -> str:
 Your job is to identify which documentation files are **factually stale** as a result.
 
 Rules:
-- Only flag docs that contain **factual errors** caused by the code change: renamed APIs,
+- Flag docs that contain **factual errors** caused by the code change: renamed APIs,
   changed CLI flags, updated config keys, modified function signatures, removed features.
-- Do NOT fix typos, grammar, or style issues.
+- Also flag **incorrect names** already present in the docs: wrong filenames, misspelled
+  command names, wrong flag names, or broken code examples — these are factual errors,
+  not style issues.
+- Do NOT fix prose typos, grammar, or style issues.
 - Do NOT flag docs that are still accurate.
 - If a doc file needs updating, return its **complete updated content** (not a diff).
   Preserve the exact file structure: every blank line, every newline, every heading.
