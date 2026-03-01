@@ -84,7 +84,7 @@ def _handle_pull_request(event: dict, repo, docs_path: str) -> None:
         sys.exit(0)
 
     docs = find_docs(repo, docs_path, diff=diff)
-    result = _analyze(diff, docs)
+    result = _analyze_with_readme_fallback(diff, docs)
 
     if not result.updates_needed or not result.changes:
         print("[dependadocs] No documentation updates needed. All good!")
@@ -124,7 +124,7 @@ def _handle_push(event: dict, repo, docs_path: str) -> None:
         sys.exit(0)
 
     docs = find_docs(repo, docs_path, diff=diff)
-    result = _analyze(diff, docs)
+    result = _analyze_with_readme_fallback(diff, docs)
 
     if not result.updates_needed or not result.changes:
         print("[dependadocs] No documentation updates needed. All good!")
@@ -154,7 +154,7 @@ def _handle_scheduled(repo, docs_path: str, lookback_days: int = 7) -> None:
         sys.exit(0)
 
     docs = find_docs(repo, docs_path, diff=diff)
-    result = _analyze(diff, docs)
+    result = _analyze_with_readme_fallback(diff, docs)
 
     if not result.updates_needed or not result.changes:
         print("[dependadocs] No documentation updates needed. All good!")
@@ -171,6 +171,46 @@ def _handle_scheduled(repo, docs_path: str, lookback_days: int = 7) -> None:
         trigger_description=f"by a scheduled run on {date_str}",
     )
     print(f"[dependadocs] Documentation PR opened: {pr_url}")
+
+
+def _is_readme(path: str) -> bool:
+    return os.path.basename(path).upper().startswith("README")
+
+
+def _find_readme_docs(docs: list[dict]) -> list[dict]:
+    return [d for d in docs if _is_readme(d["path"])]
+
+
+def _analyze_with_readme_fallback(diff: str, docs: list[dict]):
+    result = _analyze(diff, docs)
+
+    changed_files = {c.file for c in result.changes}
+    readme_docs = _find_readme_docs(docs)
+
+    if readme_docs and not any(_is_readme(f) for f in changed_files):
+        print("[dependadocs] README not flagged — running standalone correctness check…")
+        try:
+            readme_result = gemini_client.analyze_readme(diff, readme_docs)
+        except Exception as exc:
+            print(
+                f"[dependadocs] README correctness check failed (non-fatal): {exc}",
+                file=sys.stderr,
+            )
+            return result
+
+        if readme_result.changes:
+            existing = {c.file for c in result.changes}
+            new_changes = [c for c in readme_result.changes if c.file not in existing]
+            if new_changes:
+                print(
+                    f"[dependadocs] README correctness check found {len(new_changes)} issue(s)."
+                )
+                result.changes.extend(new_changes)
+                result.updates_needed = True
+        else:
+            print("[dependadocs] README correctness check: README looks correct.")
+
+    return result
 
 
 def _analyze(diff: str, docs: list[dict]):

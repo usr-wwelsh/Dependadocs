@@ -305,6 +305,125 @@ class TestFindDocsCalledWithDiff:
         assert mock_find_docs.call_args.kwargs.get("diff") == diff
 
 
+class TestReadmeFallback:
+    """Tests for _analyze_with_readme_fallback logic."""
+
+    def test_readme_fallback_triggered_when_readme_not_in_primary_changes(self, tmp_path):
+        event_path = _write_event(str(tmp_path), _make_pr_event(pr_number=1))
+        env = {**BASE_ENV, "GITHUB_EVENT_PATH": event_path}
+
+        primary_result = AnalysisResult(updates_needed=False, summary="no changes", changes=[])
+        readme_result = AnalysisResult(
+            updates_needed=True,
+            summary="README wrong",
+            changes=[FileChange(file="README.md", reason="wrong cmd", updated_content="# Fixed")],
+        )
+        readme_docs = [{"path": "README.md", "content": "old content"}]
+
+        with patch.dict(os.environ, env):
+            with patch("main.github_client.get_github_client", return_value=MagicMock()):
+                with patch("main.github_client.get_pr_diff", return_value="some diff"):
+                    with patch("main.find_docs", return_value=readme_docs):
+                        with patch("main.gemini_client.analyze", return_value=primary_result):
+                            with patch("main.gemini_client.analyze_readme", return_value=readme_result) as mock_readme:
+                                with patch("main.github_client.create_doc_pr", return_value="https://github.com/owner/repo/pull/2"):
+                                    main.main()
+
+        mock_readme.assert_called_once()
+
+    def test_readme_fallback_not_triggered_when_readme_already_updated(self, tmp_path):
+        event_path = _write_event(str(tmp_path), _make_pr_event(pr_number=1))
+        env = {**BASE_ENV, "GITHUB_EVENT_PATH": event_path}
+
+        primary_result = AnalysisResult(
+            updates_needed=True,
+            summary="readme updated",
+            changes=[FileChange(file="README.md", reason="renamed", updated_content="# New")],
+        )
+        readme_docs = [{"path": "README.md", "content": "old content"}]
+
+        with patch.dict(os.environ, env):
+            with patch("main.github_client.get_github_client", return_value=MagicMock()):
+                with patch("main.github_client.get_pr_diff", return_value="some diff"):
+                    with patch("main.find_docs", return_value=readme_docs):
+                        with patch("main.gemini_client.analyze", return_value=primary_result):
+                            with patch("main.gemini_client.analyze_readme") as mock_readme:
+                                with patch("main.github_client.create_doc_pr", return_value="https://github.com/owner/repo/pull/2"):
+                                    main.main()
+
+        mock_readme.assert_not_called()
+
+    def test_readme_fallback_not_triggered_when_no_readme_in_docs(self, tmp_path):
+        event_path = _write_event(str(tmp_path), _make_pr_event(pr_number=1))
+        env = {**BASE_ENV, "GITHUB_EVENT_PATH": event_path}
+
+        primary_result = AnalysisResult(updates_needed=False, summary="ok", changes=[])
+
+        with patch.dict(os.environ, env):
+            with patch("main.github_client.get_github_client", return_value=MagicMock()):
+                with patch("main.github_client.get_pr_diff", return_value="some diff"):
+                    with patch("main.find_docs", return_value=[{"path": "docs/guide.md", "content": "guide"}]):
+                        with patch("main.gemini_client.analyze", return_value=primary_result):
+                            with patch("main.gemini_client.analyze_readme") as mock_readme:
+                                with pytest.raises(SystemExit):
+                                    main.main()
+
+        mock_readme.assert_not_called()
+
+    def test_readme_fallback_failure_is_nonfatal(self, tmp_path):
+        event_path = _write_event(str(tmp_path), _make_pr_event(pr_number=1))
+        env = {**BASE_ENV, "GITHUB_EVENT_PATH": event_path}
+
+        primary_result = AnalysisResult(updates_needed=False, summary="ok", changes=[])
+        readme_docs = [{"path": "README.md", "content": "content"}]
+
+        with patch.dict(os.environ, env):
+            with patch("main.github_client.get_github_client", return_value=MagicMock()):
+                with patch("main.github_client.get_pr_diff", return_value="some diff"):
+                    with patch("main.find_docs", return_value=readme_docs):
+                        with patch("main.gemini_client.analyze", return_value=primary_result):
+                            with patch("main.gemini_client.analyze_readme", side_effect=RuntimeError("API down")):
+                                with pytest.raises(SystemExit) as exc_info:
+                                    main.main()
+
+        # Should exit 0 (no updates), not 1 (error)
+        assert exc_info.value.code == 0
+
+    def test_readme_fallback_changes_merged_into_result(self, tmp_path):
+        event_path = _write_event(str(tmp_path), _make_pr_event(pr_number=1))
+        env = {**BASE_ENV, "GITHUB_EVENT_PATH": event_path}
+
+        primary_result = AnalysisResult(
+            updates_needed=True,
+            summary="other doc changed",
+            changes=[FileChange(file="docs/api.md", reason="endpoint removed", updated_content="# API")],
+        )
+        readme_result = AnalysisResult(
+            updates_needed=True,
+            summary="README wrong",
+            changes=[FileChange(file="README.md", reason="wrong cmd", updated_content="# Fixed")],
+        )
+        docs = [
+            {"path": "README.md", "content": "old"},
+            {"path": "docs/api.md", "content": "api"},
+        ]
+
+        with patch.dict(os.environ, env):
+            with patch("main.github_client.get_github_client", return_value=MagicMock()):
+                with patch("main.github_client.get_pr_diff", return_value="some diff"):
+                    with patch("main.find_docs", return_value=docs):
+                        with patch("main.gemini_client.analyze", return_value=primary_result):
+                            with patch("main.gemini_client.analyze_readme", return_value=readme_result):
+                                with patch("main.github_client.create_doc_pr", return_value="https://github.com/owner/repo/pull/2") as mock_create:
+                                    main.main()
+
+        mock_create.assert_called_once()
+        call_changes = mock_create.call_args.kwargs["changes"]
+        changed_files = {c.file for c in call_changes}
+        assert "README.md" in changed_files
+        assert "docs/api.md" in changed_files
+
+
 class TestMainErrorHandling:
     def test_dies_when_event_path_missing(self):
         env = {**BASE_ENV, "GITHUB_EVENT_PATH": ""}

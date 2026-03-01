@@ -81,6 +81,84 @@ class TestBuildPrompt:
         assert "docs/api.md" in prompt
 
 
+class TestBuildReadmePrompt:
+    def test_includes_diff(self):
+        diff = "--- a/src/foo.py\n+++ b/src/foo.py\n@@ -1 +1 @@\n-old\n+new"
+        readme_docs = [{"path": "README.md", "content": "Run `old` to start."}]
+        prompt = gemini_client._build_readme_prompt(diff, readme_docs)
+        assert "old" in prompt
+        assert "new" in prompt
+
+    def test_includes_readme_content(self):
+        readme_docs = [{"path": "README.md", "content": "## Usage\nRun `foo bar`"}]
+        prompt = gemini_client._build_readme_prompt("diff", readme_docs)
+        assert "README.md" in prompt
+        assert "foo bar" in prompt
+
+    def test_multiple_readmes_all_included(self):
+        readme_docs = [
+            {"path": "README.md", "content": "root readme"},
+            {"path": "docs/README.md", "content": "docs readme"},
+        ]
+        prompt = gemini_client._build_readme_prompt("diff", readme_docs)
+        assert "root readme" in prompt
+        assert "docs readme" in prompt
+
+    def test_does_not_say_no_documentation_found(self):
+        readme_docs = [{"path": "README.md", "content": "content"}]
+        prompt = gemini_client._build_readme_prompt("diff", readme_docs)
+        assert "no documentation files found" not in prompt
+
+
+class TestAnalyzeReadme:
+    def test_calls_gemini_and_returns_result(self):
+        mock_response = MagicMock()
+        mock_response.text = json.dumps(
+            {
+                "updates_needed": True,
+                "summary": "README has wrong command",
+                "changes": [
+                    {
+                        "file": "README.md",
+                        "reason": "command renamed",
+                        "updated_content": "# Fixed README",
+                    }
+                ],
+            }
+        )
+
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "fake-key"}):
+            with patch("gemini_client.genai.Client", return_value=mock_client):
+                result = gemini_client.analyze_readme(
+                    "some diff", [{"path": "README.md", "content": "old cmd"}]
+                )
+
+        assert result.updates_needed is True
+        assert len(result.changes) == 1
+        assert result.changes[0].file == "README.md"
+
+    def test_returns_no_changes_when_readme_correct(self):
+        mock_response = MagicMock()
+        mock_response.text = json.dumps(
+            {"updates_needed": False, "summary": "README looks correct", "changes": []}
+        )
+
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "fake-key"}):
+            with patch("gemini_client.genai.Client", return_value=mock_client):
+                result = gemini_client.analyze_readme(
+                    "diff", [{"path": "README.md", "content": "correct content"}]
+                )
+
+        assert result.updates_needed is False
+        assert result.changes == []
+
+
 class TestAnalyze:
     def test_calls_gemini_and_returns_result(self):
         mock_response = MagicMock()

@@ -47,6 +47,32 @@ class AnalysisResult:
     changes: list[FileChange] = field(default_factory=list)
 
 
+def analyze_readme(diff: str, readme_docs: list[dict]) -> AnalysisResult:
+    """Secondary pass: check README files for correctness independent of the diff.
+
+    Args:
+        diff: Unified diff string (used as context only).
+        readme_docs: List of {path, content} dicts for README files.
+
+    Returns:
+        AnalysisResult with any factual corrections needed.
+    """
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    prompt = _build_readme_prompt(diff, readme_docs)
+
+    response = client.models.generate_content(
+        model=MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=RESPONSE_SCHEMA,
+            max_output_tokens=16384,
+        ),
+    )
+
+    return _parse_response(response.text)
+
+
 def analyze(diff: str, docs: list[dict]) -> AnalysisResult:
     """Send diff + docs to Gemini and return structured analysis.
 
@@ -107,6 +133,44 @@ Rules:
 ```
 
 ## Existing Documentation
+
+{docs_section}
+
+Respond with JSON matching the provided schema.
+"""
+
+
+def _build_readme_prompt(diff: str, readme_docs: list[dict]) -> str:
+    docs_section = "\n\n".join(
+        f"### {doc['path']}\n```\n{doc['content']}\n```" for doc in readme_docs
+    )
+
+    return f"""You are a documentation reviewer. A code change was recently made (diff shown below).
+The primary diff analysis did not flag any README updates, but READMEs are often overlooked.
+
+Your job: review each README file and decide if it is **factually correct**.
+
+Do NOT anchor only on what changed in the diff — review the README holistically.
+Ask yourself: do the commands, file paths, API names, feature descriptions, and code
+examples accurately reflect how the project actually works?
+
+Rules:
+- Flag only genuine **factual errors**: wrong commands, outdated examples, incorrect
+  filenames, broken code snippets, or features that don't match reality.
+- Do NOT fix prose, grammar, or style.
+- Do NOT flag missing documentation — only incorrect documentation.
+- Be conservative — when in doubt, omit. A false negative is better than a false positive.
+- If a README needs updating, return its **complete updated content** (not a diff).
+  Preserve exact file structure: every blank line, every newline, every heading.
+- If the README is correct, set updates_needed to false and return an empty changes array.
+
+## Recent Diff (for context)
+
+```diff
+{diff}
+```
+
+## README File(s) to Review
 
 {docs_section}
 
