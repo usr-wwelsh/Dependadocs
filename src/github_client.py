@@ -111,6 +111,7 @@ def create_doc_pr(
     files_written = sum(1 for change in changes if _upsert_file(repo, branch_name, change))
     if files_written == 0:
         print("[dependadocs] No files changed after comparing content — skipping PR creation.")
+        _delete_branch(repo, branch_name)
         return ""
 
     body_lines = [
@@ -186,6 +187,16 @@ def _upsert_file(repo: "Repository", branch: str, change: FileChange) -> bool:
         )
         print(f"[dependadocs] Created {change.file}.")
     return True
+
+
+def _delete_branch(repo: "Repository", branch_name: str) -> None:
+    """Delete a branch ref, ignoring errors if it doesn't exist."""
+    try:
+        ref = repo.get_git_ref(f"heads/{branch_name}")
+        ref.delete()
+        print(f"[dependadocs] Deleted branch '{branch_name}'.")
+    except GithubException as exc:
+        print(f"[dependadocs] Warning: could not delete branch '{branch_name}': {exc}")
 
 
 def _ensure_label(repo: "Repository", name: str, color: str, description: str) -> None:

@@ -265,7 +265,9 @@ class TestCreateDocPr:
         branch_obj = MagicMock()
         branch_obj.commit.sha = "base_sha"
         repo.get_branch.return_value = branch_obj
-        repo.get_git_ref.side_effect = GithubException(404, "not found")
+        # First call: _ensure_branch (branch missing) → create; subsequent: _delete_branch
+        ref_mock = MagicMock()
+        repo.get_git_ref.side_effect = [GithubException(404, "not found"), ref_mock]
 
         existing = MagicMock()
         existing.sha = "filsha"
@@ -284,3 +286,4 @@ class TestCreateDocPr:
 
         assert url == ""
         repo.create_pull.assert_not_called()
+        ref_mock.delete.assert_called_once()
