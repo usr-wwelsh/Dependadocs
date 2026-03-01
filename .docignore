@@ -1,0 +1,8 @@
+# Dependadocs will not suggest edits to files matching these patterns.
+# See README for syntax details.
+
+# Changelog — managed manually
+CHANGELOG.md
+
+# Auto-generated files
+*.generated.md
