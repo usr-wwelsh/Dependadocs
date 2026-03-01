@@ -83,7 +83,7 @@ def _handle_pull_request(event: dict, repo, docs_path: str) -> None:
         print("[dependadocs] PR has no diff. Exiting.")
         sys.exit(0)
 
-    docs = find_docs(repo, docs_path)
+    docs = find_docs(repo, docs_path, diff=diff)
     result = _analyze(diff, docs)
 
     if not result.updates_needed or not result.changes:
@@ -123,7 +123,7 @@ def _handle_push(event: dict, repo, docs_path: str) -> None:
         print("[dependadocs] Push has no diff. Exiting.")
         sys.exit(0)
 
-    docs = find_docs(repo, docs_path)
+    docs = find_docs(repo, docs_path, diff=diff)
     result = _analyze(diff, docs)
 
     if not result.updates_needed or not result.changes:
@@ -153,7 +153,7 @@ def _handle_scheduled(repo, docs_path: str, lookback_days: int = 7) -> None:
         print("[dependadocs] No changes since last run. Exiting.")
         sys.exit(0)
 
-    docs = find_docs(repo, docs_path)
+    docs = find_docs(repo, docs_path, diff=diff)
     result = _analyze(diff, docs)
 
     if not result.updates_needed or not result.changes:

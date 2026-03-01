@@ -246,6 +246,65 @@ class TestMainScheduled:
         mock_diff.assert_called_once()
 
 
+class TestFindDocsCalledWithDiff:
+    def test_pull_request_passes_diff(self, tmp_path):
+        event_path = _write_event(str(tmp_path), _make_pr_event(pr_number=3))
+        env = {**BASE_ENV, "GITHUB_EVENT_PATH": event_path}
+        diff = "--- a/src/auth.py\n+++ b/src/auth.py\n@@ -1,3 +1,4 @@"
+        result = AnalysisResult(updates_needed=False, summary="OK", changes=[])
+
+        with patch.dict(os.environ, env):
+            with patch("main.github_client.get_github_client", return_value=MagicMock()):
+                with patch("main.github_client.get_pr_diff", return_value=diff):
+                    with patch("main.find_docs", return_value=[]) as mock_find_docs:
+                        with patch("main.gemini_client.analyze", return_value=result):
+                            with pytest.raises(SystemExit):
+                                main.main()
+
+        mock_find_docs.assert_called_once()
+        assert mock_find_docs.call_args.kwargs.get("diff") == diff
+
+    def test_push_passes_diff(self, tmp_path):
+        before = "a" * 40
+        after = "b" * 40
+        event_path = _write_event(str(tmp_path), _make_push_event(before=before, after=after))
+        env = {**BASE_ENV, "GITHUB_EVENT_NAME": "push", "GITHUB_EVENT_PATH": event_path}
+        diff = "--- a/src/api.py\n+++ b/src/api.py\n@@ -1 +1 @@"
+        result = AnalysisResult(updates_needed=False, summary="OK", changes=[])
+
+        with patch.dict(os.environ, env):
+            with patch("main.github_client.get_github_client", return_value=MagicMock()):
+                with patch("main.github_client.get_commit_diff", return_value=diff):
+                    with patch("main.find_docs", return_value=[]) as mock_find_docs:
+                        with patch("main.gemini_client.analyze", return_value=result):
+                            with pytest.raises(SystemExit):
+                                main.main()
+
+        mock_find_docs.assert_called_once()
+        assert mock_find_docs.call_args.kwargs.get("diff") == diff
+
+    def test_scheduled_passes_diff(self, tmp_path):
+        event_path = _write_event(str(tmp_path), _make_schedule_event())
+        env = {**BASE_ENV, "GITHUB_EVENT_NAME": "schedule", "GITHUB_EVENT_PATH": event_path}
+        mock_repo = MagicMock()
+        mock_repo.default_branch = "main"
+        mock_gh = MagicMock()
+        mock_gh.get_repo.return_value = mock_repo
+        diff = "--- a/src/models.py\n+++ b/src/models.py\n@@ -1 +1 @@"
+        result = AnalysisResult(updates_needed=False, summary="OK", changes=[])
+
+        with patch.dict(os.environ, env):
+            with patch("main.github_client.get_github_client", return_value=mock_gh):
+                with patch("main.github_client.get_scheduled_diff", return_value=(diff, "abc1234")):
+                    with patch("main.find_docs", return_value=[]) as mock_find_docs:
+                        with patch("main.gemini_client.analyze", return_value=result):
+                            with pytest.raises(SystemExit):
+                                main.main()
+
+        mock_find_docs.assert_called_once()
+        assert mock_find_docs.call_args.kwargs.get("diff") == diff
+
+
 class TestMainErrorHandling:
     def test_dies_when_event_path_missing(self):
         env = {**BASE_ENV, "GITHUB_EVENT_PATH": ""}

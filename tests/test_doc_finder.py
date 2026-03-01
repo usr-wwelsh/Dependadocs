@@ -117,10 +117,11 @@ class TestFindDocs:
     def test_respects_docs_path(self):
         repo = MagicMock()
 
-        with patch.object(doc_finder, "_collect_files", return_value=[]) as mock_collect:
-            doc_finder.find_docs(repo, "docs/")
+        with patch.object(doc_finder, "_load_ignore_patterns", return_value=[]):
+            with patch.object(doc_finder, "_collect_files", return_value=[]) as mock_collect:
+                doc_finder.find_docs(repo, "docs/")
 
-        mock_collect.assert_called_once_with(repo, "docs")
+        mock_collect.assert_called_once_with(repo, "docs", [])
 
     def test_empty_repo_returns_empty_list(self):
         repo = MagicMock()
@@ -201,3 +202,195 @@ class TestFindDocs:
 
         result = doc_finder._collect_files(repo, "")
         assert result == []
+
+
+class TestLoadIgnorePatterns:
+    def test_reads_docignore(self):
+        repo = MagicMock()
+        contents = MagicMock()
+        contents.decoded_content = b"# Keep these untouched\nCHANGELOG.md\n\nADR/\n"
+        repo.get_contents.return_value = contents
+
+        result = doc_finder._load_ignore_patterns(repo)
+        assert result == ["CHANGELOG.md", "ADR/"]
+
+    def test_returns_empty_when_missing(self):
+        from github import GithubException
+        repo = MagicMock()
+        repo.get_contents.side_effect = GithubException(404, "not found")
+
+        result = doc_finder._load_ignore_patterns(repo)
+        assert result == []
+
+    def test_strips_whitespace(self):
+        repo = MagicMock()
+        contents = MagicMock()
+        contents.decoded_content = b"  CHANGELOG.md  \n  ADR/  \n"
+        repo.get_contents.return_value = contents
+
+        result = doc_finder._load_ignore_patterns(repo)
+        assert result == ["CHANGELOG.md", "ADR/"]
+
+
+class TestMatchesIgnore:
+    def test_filename_pattern(self):
+        assert doc_finder._matches_ignore("docs/releases/CHANGELOG.md", ["CHANGELOG.md"]) is True
+
+    def test_filename_pattern_no_false_positive(self):
+        assert doc_finder._matches_ignore("docs/api.md", ["CHANGELOG.md"]) is False
+
+    def test_directory_pattern(self):
+        assert doc_finder._matches_ignore("docs/ADR/0001.md", ["ADR/"]) is True
+
+    def test_directory_pattern_no_false_positive(self):
+        # ADR.md is a filename, not inside an ADR directory
+        assert doc_finder._matches_ignore("docs/ADR.md", ["ADR/"]) is False
+
+    def test_glob_filename_pattern(self):
+        assert doc_finder._matches_ignore("schema.generated.md", ["*.generated.md"]) is True
+
+    def test_path_glob_pattern(self):
+        assert doc_finder._matches_ignore("docs/internal/secrets.md", ["docs/internal/*"]) is True
+
+    def test_path_glob_no_false_positive(self):
+        assert doc_finder._matches_ignore("docs/public/guide.md", ["docs/internal/*"]) is False
+
+    def test_empty_patterns(self):
+        assert doc_finder._matches_ignore("README.md", []) is False
+
+
+class TestCollectFilesWithIgnore:
+    def test_skips_ignored_path(self):
+        repo = MagicMock()
+        changelog = _make_file("CHANGELOG.md")
+        repo.get_contents.return_value = [changelog]
+
+        result = doc_finder._collect_files(repo, "", ignore_patterns=["CHANGELOG.md"])
+        assert "CHANGELOG.md" not in result
+
+    def test_includes_non_ignored_path(self):
+        repo = MagicMock()
+        readme = _make_file("README.md")
+        changelog = _make_file("CHANGELOG.md")
+        repo.get_contents.return_value = [readme, changelog]
+
+        result = doc_finder._collect_files(repo, "", ignore_patterns=["CHANGELOG.md"])
+        assert "README.md" in result
+        assert "CHANGELOG.md" not in result
+
+    def test_no_ignore_patterns_unchanged(self):
+        repo = MagicMock()
+        readme = _make_file("README.md")
+        repo.get_contents.return_value = [readme]
+
+        result = doc_finder._collect_files(repo, "", ignore_patterns=None)
+        assert "README.md" in result
+
+
+class TestExtractChangedPaths:
+    def test_parses_diff_paths(self):
+        diff = "--- a/src/auth/login.py\n+++ b/src/auth/login.py\n@@ -1,3 +1,4 @@"
+        result = doc_finder._extract_changed_paths(diff)
+        assert "src/auth/login.py" in result
+
+    def test_skips_dev_null(self):
+        diff = "--- /dev/null\n+++ b/src/new_file.py\n@@ -0,0 +1 @@"
+        result = doc_finder._extract_changed_paths(diff)
+        assert "/dev/null" not in result
+        assert "src/new_file.py" in result
+
+    def test_empty_diff(self):
+        result = doc_finder._extract_changed_paths("")
+        assert result == set()
+
+    def test_deduplicates(self):
+        diff = "--- a/src/auth.py\n+++ b/src/auth.py\n@@ diff"
+        result = doc_finder._extract_changed_paths(diff)
+        assert result == {"src/auth.py"}
+
+
+class TestKeywordsFromPaths:
+    def test_splits_and_stems(self):
+        result = doc_finder._keywords_from_paths({"src/auth/login.py"})
+        assert "src" in result
+        assert "auth" in result
+        assert "login" in result
+
+    def test_filters_short_tokens(self):
+        result = doc_finder._keywords_from_paths({"a/b/c.py"})
+        assert result == set()
+
+    def test_lowercases(self):
+        result = doc_finder._keywords_from_paths({"AuthService.py"})
+        assert "authservice" in result
+
+    def test_empty_set(self):
+        result = doc_finder._keywords_from_paths(set())
+        assert result == set()
+
+
+class TestScorePath:
+    def test_no_match_returns_zero(self):
+        assert doc_finder._score_path("guide.md", {"auth"}) == 0
+
+    def test_substring_match(self):
+        # "auth" appears in "authentication.md" but is not the stem
+        score = doc_finder._score_path("authentication.md", {"auth"})
+        assert score == 1
+
+    def test_exact_stem_match_bonus(self):
+        # "auth" IS the stem of "auth.md" → extra point
+        score = doc_finder._score_path("auth.md", {"auth"})
+        assert score == 2
+
+    def test_multiple_keywords(self):
+        score = doc_finder._score_path("docs/auth/guide.md", {"auth", "guide"})
+        # "auth": substring(1) + stem(1) = 2
+        # "guide": substring(1) + stem(1) = 2
+        assert score == 4
+
+    def test_empty_keywords(self):
+        assert doc_finder._score_path("README.md", set()) == 0
+
+
+class TestFindDocsRanking:
+    def _make_content_obj(self, content: str = "# Doc") -> MagicMock:
+        obj = MagicMock()
+        obj.decoded_content = content.encode("utf-8")
+        return obj
+
+    def test_ranks_by_relevance(self):
+        repo = MagicMock()
+        repo.get_contents.return_value = self._make_content_obj()
+        diff = "--- a/src/auth/service.py\n+++ b/src/auth/service.py\n@@ diff"
+
+        with patch.object(doc_finder, "_load_ignore_patterns", return_value=[]):
+            with patch.object(doc_finder, "_collect_files", return_value=["guide.md", "auth.md"]):
+                docs = doc_finder.find_docs(repo, "", diff=diff)
+
+        paths = [d["path"] for d in docs]
+        assert paths.index("auth.md") < paths.index("guide.md")
+
+    def test_without_diff_preserves_alphabetical_order(self):
+        repo = MagicMock()
+        repo.get_contents.return_value = self._make_content_obj()
+
+        with patch.object(doc_finder, "_load_ignore_patterns", return_value=[]):
+            with patch.object(doc_finder, "_collect_files", return_value=["auth.md", "guide.md"]):
+                docs = doc_finder.find_docs(repo, "", diff="")
+
+        paths = [d["path"] for d in docs]
+        assert paths == ["auth.md", "guide.md"]
+
+    def test_with_diff_but_no_matching_keywords(self):
+        repo = MagicMock()
+        repo.get_contents.return_value = self._make_content_obj()
+        # All path components are ≤2 chars → no keywords extracted → no re-sort
+        diff = "--- a/x/y.py\n+++ b/x/y.py\n@@ diff"
+
+        with patch.object(doc_finder, "_load_ignore_patterns", return_value=[]):
+            with patch.object(doc_finder, "_collect_files", return_value=["guide.md", "auth.md"]):
+                docs = doc_finder.find_docs(repo, "", diff=diff)
+
+        paths = [d["path"] for d in docs]
+        assert paths == ["guide.md", "auth.md"]
