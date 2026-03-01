@@ -95,16 +95,17 @@ It is explicitly told to **ignore** typos, grammar, and style improvements.
 
 ## Ignoring files
 
-You can exclude files from Dependadocs by creating a `.docignorre` file in your repo root. Each line is a glob pattern — files matching any pattern will be skipped.
+You can exclude files from Dependadocs by creating a `.docignore` file in your repo root. Each line is a glob pattern — files matching any pattern will be skipped.
 
 ```
 # Example .docignore
 CHANGELOG.md
+ADR/
 docs/internal/*
 *.generated.md
 ```
 
-Note: directory exlcusions use a trailing `*` wildcard (e.g. `ADR/*`).
+Patterns with a trailing `/` match any file inside that directory (e.g. `ADR/` excludes all files under `ADR/`). Patterns without a `/` match by filename anywhere in the repo.
 
 ---
 
