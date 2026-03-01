@@ -81,6 +81,76 @@ class TestBuildPrompt:
         assert "docs/api.md" in prompt
 
 
+class TestBuildDocsAuditPrompt:
+    def test_includes_doc_content(self):
+        docs = [{"path": "README.md", "content": "Run `foo` to start."}]
+        prompt = gemini_client._build_docs_audit_prompt(docs)
+        assert "README.md" in prompt
+        assert "foo" in prompt
+
+    def test_multiple_docs_all_included(self):
+        docs = [
+            {"path": "README.md", "content": "readme content"},
+            {"path": "docs/api.md", "content": "api content"},
+        ]
+        prompt = gemini_client._build_docs_audit_prompt(docs)
+        assert "readme content" in prompt
+        assert "api content" in prompt
+
+    def test_does_not_reference_diff(self):
+        docs = [{"path": "README.md", "content": "content"}]
+        prompt = gemini_client._build_docs_audit_prompt(docs)
+        assert "diff" not in prompt.lower() or "no recent code changes" in prompt
+
+
+class TestAnalyzeDocsAudit:
+    def test_calls_gemini_and_returns_result(self):
+        mock_response = MagicMock()
+        mock_response.text = json.dumps(
+            {
+                "updates_needed": True,
+                "summary": "README has stale command",
+                "changes": [
+                    {
+                        "file": "README.md",
+                        "reason": "command no longer exists",
+                        "updated_content": "# Fixed README",
+                    }
+                ],
+            }
+        )
+
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "fake-key"}):
+            with patch("gemini_client.genai.Client", return_value=mock_client):
+                result = gemini_client.analyze_docs_audit(
+                    [{"path": "README.md", "content": "old cmd"}]
+                )
+
+        assert result.updates_needed is True
+        assert len(result.changes) == 1
+
+    def test_returns_no_changes_when_docs_correct(self):
+        mock_response = MagicMock()
+        mock_response.text = json.dumps(
+            {"updates_needed": False, "summary": "All docs look correct", "changes": []}
+        )
+
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "fake-key"}):
+            with patch("gemini_client.genai.Client", return_value=mock_client):
+                result = gemini_client.analyze_docs_audit(
+                    [{"path": "README.md", "content": "correct content"}]
+                )
+
+        assert result.updates_needed is False
+        assert result.changes == []
+
+
 class TestBuildReadmePrompt:
     def test_includes_diff(self):
         diff = "--- a/src/foo.py\n+++ b/src/foo.py\n@@ -1 +1 @@\n-old\n+new"

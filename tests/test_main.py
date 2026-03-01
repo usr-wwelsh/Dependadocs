@@ -305,6 +305,122 @@ class TestFindDocsCalledWithDiff:
         assert mock_find_docs.call_args.kwargs.get("diff") == diff
 
 
+class TestScheduledDocsAudit:
+    """Tests for the no-diff docs audit path in scheduled runs."""
+
+    def _base_env(self, tmp_path, event_name="schedule"):
+        event_path = _write_event(str(tmp_path), _make_schedule_event())
+        return {**BASE_ENV, "GITHUB_EVENT_NAME": event_name, "GITHUB_EVENT_PATH": event_path}
+
+    def _mock_gh(self, default_branch="main"):
+        mock_repo = MagicMock()
+        mock_repo.default_branch = default_branch
+        mock_gh = MagicMock()
+        mock_gh.get_repo.return_value = mock_repo
+        return mock_gh, mock_repo
+
+    def test_runs_audit_when_no_diff(self, tmp_path):
+        env = self._base_env(tmp_path)
+        mock_gh, mock_repo = self._mock_gh()
+        audit_result = AnalysisResult(
+            updates_needed=True,
+            summary="stale docs",
+            changes=[FileChange(file="README.md", reason="outdated", updated_content="# Fixed")],
+        )
+
+        with patch.dict(os.environ, env):
+            with patch("main.github_client.get_github_client", return_value=mock_gh):
+                with patch("main.github_client.get_scheduled_diff", return_value=("", "abc1234")):
+                    with patch("main.find_docs", return_value=[{"path": "README.md", "content": "old"}]):
+                        with patch("main.gemini_client.analyze_docs_audit", return_value=audit_result) as mock_audit:
+                            with patch("main.gemini_client.analyze") as mock_analyze:
+                                with patch("main.github_client.create_doc_pr", return_value="https://github.com/owner/repo/pull/1"):
+                                    main.main()
+
+        mock_audit.assert_called_once()
+        mock_analyze.assert_not_called()
+
+    def test_exits_cleanly_when_no_diff_and_no_docs(self, tmp_path):
+        env = self._base_env(tmp_path)
+        mock_gh, _ = self._mock_gh()
+
+        with patch.dict(os.environ, env):
+            with patch("main.github_client.get_github_client", return_value=mock_gh):
+                with patch("main.github_client.get_scheduled_diff", return_value=("", "abc1234")):
+                    with patch("main.find_docs", return_value=[]):
+                        with pytest.raises(SystemExit) as exc_info:
+                            main.main()
+
+        assert exc_info.value.code == 0
+
+    def test_exits_cleanly_when_audit_finds_no_issues(self, tmp_path):
+        env = self._base_env(tmp_path)
+        mock_gh, _ = self._mock_gh()
+        audit_result = AnalysisResult(updates_needed=False, summary="all good", changes=[])
+
+        with patch.dict(os.environ, env):
+            with patch("main.github_client.get_github_client", return_value=mock_gh):
+                with patch("main.github_client.get_scheduled_diff", return_value=("", "abc1234")):
+                    with patch("main.find_docs", return_value=[{"path": "README.md", "content": "ok"}]):
+                        with patch("main.gemini_client.analyze_docs_audit", return_value=audit_result):
+                            with pytest.raises(SystemExit) as exc_info:
+                                main.main()
+
+        assert exc_info.value.code == 0
+
+    def test_opens_pr_from_audit_results(self, tmp_path):
+        env = self._base_env(tmp_path)
+        mock_gh, _ = self._mock_gh()
+        audit_result = AnalysisResult(
+            updates_needed=True,
+            summary="stale",
+            changes=[FileChange(file="README.md", reason="outdated", updated_content="# Fixed")],
+        )
+
+        with patch.dict(os.environ, env):
+            with patch("main.github_client.get_github_client", return_value=mock_gh):
+                with patch("main.github_client.get_scheduled_diff", return_value=("", "abc1234")):
+                    with patch("main.find_docs", return_value=[{"path": "README.md", "content": "old"}]):
+                        with patch("main.gemini_client.analyze_docs_audit", return_value=audit_result):
+                            with patch("main.github_client.create_doc_pr", return_value="https://github.com/owner/repo/pull/1") as mock_create:
+                                main.main()
+
+        mock_create.assert_called_once()
+        assert "scheduled-" in mock_create.call_args.kwargs["branch_suffix"]
+
+    def test_uses_normal_path_when_diff_present(self, tmp_path):
+        env = self._base_env(tmp_path)
+        mock_gh, _ = self._mock_gh()
+        analyze_result = AnalysisResult(updates_needed=False, summary="ok", changes=[])
+
+        with patch.dict(os.environ, env):
+            with patch("main.github_client.get_github_client", return_value=mock_gh):
+                with patch("main.github_client.get_scheduled_diff", return_value=("some diff", "abc1234")):
+                    with patch("main.find_docs", return_value=[]):
+                        with patch("main.gemini_client.analyze", return_value=analyze_result) as mock_analyze:
+                            with patch("main.gemini_client.analyze_docs_audit") as mock_audit:
+                                with pytest.raises(SystemExit):
+                                    main.main()
+
+        mock_analyze.assert_called_once()
+        mock_audit.assert_not_called()
+
+    def test_workflow_dispatch_also_runs_audit_on_empty_diff(self, tmp_path):
+        env = self._base_env(tmp_path, event_name="workflow_dispatch")
+        mock_gh, _ = self._mock_gh()
+        audit_result = AnalysisResult(updates_needed=False, summary="ok", changes=[])
+
+        with patch.dict(os.environ, env):
+            with patch("main.github_client.get_github_client", return_value=mock_gh):
+                with patch("main.github_client.get_scheduled_diff", return_value=("", "abc1234")):
+                    with patch("main.find_docs", return_value=[{"path": "README.md", "content": "ok"}]):
+                        with patch("main.gemini_client.analyze_docs_audit", return_value=audit_result) as mock_audit:
+                            with pytest.raises(SystemExit):
+                                main.main()
+
+        mock_audit.assert_called_once()
+
+
 class TestReadmeFallback:
     """Tests for _analyze_with_readme_fallback logic."""
 

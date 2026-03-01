@@ -148,20 +148,24 @@ def _handle_scheduled(repo, docs_path: str, lookback_days: int = 7) -> None:
     print(f"[dependadocs] Scheduled/manual run on {default_branch}")
 
     diff, head_sha = github_client.get_scheduled_diff(repo, default_branch, lookback_days)
+    date_str = datetime.date.today().isoformat()
 
-    if not diff.strip():
-        print("[dependadocs] No changes since last run. Exiting.")
-        sys.exit(0)
-
-    docs = find_docs(repo, docs_path, diff=diff)
-    result = _analyze_with_readme_fallback(diff, docs)
+    if diff.strip():
+        docs = find_docs(repo, docs_path, diff=diff)
+        result = _analyze_with_readme_fallback(diff, docs)
+    else:
+        print("[dependadocs] No recent commits — running general docs audit…")
+        docs = find_docs(repo, docs_path)
+        if not docs:
+            print("[dependadocs] No docs found. Exiting.")
+            sys.exit(0)
+        result = _audit_docs(docs)
 
     if not result.updates_needed or not result.changes:
         print("[dependadocs] No documentation updates needed. All good!")
         sys.exit(0)
 
     _log_changes(result.changes)
-    date_str = datetime.date.today().isoformat()
     pr_url = _create_pr(
         repo=repo,
         base_ref=default_branch,
@@ -210,6 +214,16 @@ def _analyze_with_readme_fallback(diff: str, docs: list[dict]):
         else:
             print("[dependadocs] README correctness check: README looks correct.")
 
+    return result
+
+
+def _audit_docs(docs: list[dict]):
+    print("[dependadocs] Sending docs to Gemini for audit…")
+    try:
+        result = gemini_client.analyze_docs_audit(docs)
+    except Exception as exc:
+        _die(f"Gemini docs audit failed: {exc}")
+    print(f"[dependadocs] Summary: {result.summary}")
     return result
 
 

@@ -47,6 +47,31 @@ class AnalysisResult:
     changes: list[FileChange] = field(default_factory=list)
 
 
+def analyze_docs_audit(docs: list[dict]) -> AnalysisResult:
+    """Holistic docs audit with no diff context — for when there are no recent commits.
+
+    Args:
+        docs: List of {path, content} dicts for all doc files.
+
+    Returns:
+        AnalysisResult with any factual corrections needed.
+    """
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    prompt = _build_docs_audit_prompt(docs)
+
+    response = client.models.generate_content(
+        model=MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=RESPONSE_SCHEMA,
+            max_output_tokens=16384,
+        ),
+    )
+
+    return _parse_response(response.text)
+
+
 def analyze_readme(diff: str, readme_docs: list[dict]) -> AnalysisResult:
     """Secondary pass: check README files for correctness independent of the diff.
 
@@ -133,6 +158,36 @@ Rules:
 ```
 
 ## Existing Documentation
+
+{docs_section}
+
+Respond with JSON matching the provided schema.
+"""
+
+
+def _build_docs_audit_prompt(docs: list[dict]) -> str:
+    docs_section = "\n\n".join(
+        f"### {doc['path']}\n```\n{doc['content']}\n```" for doc in docs
+    )
+
+    return f"""You are a documentation auditor. There are no recent code changes to anchor on.
+
+Review each documentation file below and identify any **factual errors**.
+
+Ask yourself: do the commands, file paths, API names, feature descriptions, and code
+examples accurately reflect how the project actually works?
+
+Rules:
+- Flag only genuine **factual errors**: wrong commands, outdated examples, incorrect
+  filenames, broken code snippets, or features that don't match reality.
+- Do NOT fix prose, grammar, or style.
+- Do NOT flag missing documentation — only incorrect documentation.
+- Be conservative — when in doubt, omit. A false negative is better than a false positive.
+- If a doc needs updating, return its **complete updated content** (not a diff).
+  Preserve exact file structure: every blank line, every newline, every heading.
+- If all docs are correct, set updates_needed to false and return an empty changes array.
+
+## Documentation Files
 
 {docs_section}
 
