@@ -6,8 +6,6 @@ import fnmatch
 import os
 from typing import TYPE_CHECKING
 
-from github import GithubException
-
 if TYPE_CHECKING:
     from github.Repository import Repository
 
