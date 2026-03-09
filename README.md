@@ -15,7 +15,7 @@
 Your PR opened/updated, or on schedule, or manually triggered
   → fetch diff via GitHub API
   → discover .md / .rst / .txt files in your repo
-  → send diff + docs to Gemini 2.5 Flash (for primary, diff-focused analysis)
+  → send diff + docs to Gemini 1.5 Flash (for primary, diff-focused analysis)
   → (if READMEs are present and not updated by primary analysis) send READMEs to Gemini for a holistic correctness check
   → if *any* docs are stale:
       open a new PR  →  dependadocs/pr-{number}  →  targeting your base branch
