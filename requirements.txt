@@ -1,2 +1,5 @@
 google-genai>=1.0.0
 PyGithub>=2.3.0
+pytest
+pytest-mock
+ruff
