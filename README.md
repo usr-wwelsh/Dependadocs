@@ -125,7 +125,7 @@ permissions:
 ## Development
 
 ```bash
-pip install -r requirements.txt pytest pytest-mock ruff
+pip install -r requirements.txt
 pytest tests/ -v
 ruff check src/ tests/
 ```
