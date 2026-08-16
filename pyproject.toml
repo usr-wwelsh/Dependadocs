@@ -5,3 +5,9 @@ filterwarnings = [
 
 [tool.ruff]
 target-version = "py312"
+
+[tool.ruff.lint]
+# BLE001: blind `except Exception` is intentional in github_client.py/doc_finder.py —
+# these wrap the GitHub API and log-and-continue on any failure rather than crash the action.
+# SIM117: nested `with patch(...)` blocks are the established idiom across the test suite.
+ignore = ["BLE001", "SIM117"]

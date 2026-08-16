@@ -1,11 +1,12 @@
 """Unit tests for github_client.py."""
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from unittest.mock import MagicMock
+
 from github import GithubException
 
 import github_client
@@ -108,7 +109,7 @@ class TestGetScheduledDiff:
         repo.get_commits.return_value = commits
 
         github_client.get_commit_diff = MagicMock(return_value="some diff")
-        diff, head_sha = github_client.get_scheduled_diff(repo, "main", lookback_days=7)
+        _diff, head_sha = github_client.get_scheduled_diff(repo, "main", lookback_days=7)
 
         assert head_sha == "head_sha"
         github_client.get_commit_diff.assert_called_once_with(repo, commits[4].sha, "head_sha")

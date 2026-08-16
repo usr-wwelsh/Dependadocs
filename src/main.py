@@ -147,8 +147,8 @@ def _handle_scheduled(repo, docs_path: str, lookback_days: int = 7) -> None:
     default_branch = repo.default_branch
     print(f"[dependadocs] Scheduled/manual run on {default_branch}")
 
-    diff, head_sha = github_client.get_scheduled_diff(repo, default_branch, lookback_days)
-    date_str = datetime.date.today().isoformat()
+    diff, _head_sha = github_client.get_scheduled_diff(repo, default_branch, lookback_days)
+    date_str = datetime.datetime.now(datetime.UTC).date().isoformat()
 
     if diff.strip():
         docs = find_docs(repo, docs_path, diff=diff)

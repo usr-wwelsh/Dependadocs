@@ -20,7 +20,7 @@ def get_github_client(token: str) -> Github:
     return Github(token)
 
 
-def get_pr_diff(repo: "Repository", pr_number: int) -> str:
+def get_pr_diff(repo: Repository, pr_number: int) -> str:
     """Return a unified-diff-style string for all files changed in the PR."""
     pull = repo.get_pull(pr_number)
     files = pull.get_files()
@@ -34,7 +34,7 @@ def get_pr_diff(repo: "Repository", pr_number: int) -> str:
     return "\n".join(parts)
 
 
-def get_commit_diff(repo: "Repository", base_sha: str, head_sha: str) -> str:
+def get_commit_diff(repo: Repository, base_sha: str, head_sha: str) -> str:
     """Return a unified-diff-style string comparing base_sha to head_sha."""
     try:
         comparison = repo.compare(base_sha, head_sha)
@@ -66,7 +66,7 @@ def get_commit_diff(repo: "Repository", base_sha: str, head_sha: str) -> str:
     return "\n".join(parts)
 
 
-def get_scheduled_diff(repo: "Repository", default_branch: str, lookback_days: int = 7) -> tuple[str, str]:
+def get_scheduled_diff(repo: Repository, default_branch: str, lookback_days: int = 7) -> tuple[str, str]:
     """Return (diff, head_sha) for a scheduled or manual run.
 
     Diffs commits from the last `lookback_days` days against HEAD.
@@ -74,7 +74,7 @@ def get_scheduled_diff(repo: "Repository", default_branch: str, lookback_days: i
     import datetime
 
     head_sha = repo.get_branch(default_branch).commit.sha
-    since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=lookback_days)
+    since = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=lookback_days)
 
     commits = list(repo.get_commits(sha=default_branch, since=since))
     if not commits:
@@ -92,7 +92,7 @@ def get_scheduled_diff(repo: "Repository", default_branch: str, lookback_days: i
 
 
 def create_doc_pr(
-    repo: "Repository",
+    repo: Repository,
     base_ref: str,
     changes: list[FileChange],
     branch_suffix: str,
@@ -143,7 +143,7 @@ def create_doc_pr(
     return pr.html_url
 
 
-def _ensure_branch(repo: "Repository", branch_name: str, base_sha: str) -> None:
+def _ensure_branch(repo: Repository, branch_name: str, base_sha: str) -> None:
     """Create the branch if it doesn't exist; if it does, reset it to base_sha."""
     ref_path = f"refs/heads/{branch_name}"
     try:
@@ -155,7 +155,7 @@ def _ensure_branch(repo: "Repository", branch_name: str, base_sha: str) -> None:
         print(f"[dependadocs] Created branch '{branch_name}' at {base_sha[:7]}.")
 
 
-def _upsert_file(repo: "Repository", branch: str, change: FileChange) -> bool:
+def _upsert_file(repo: Repository, branch: str, change: FileChange) -> bool:
     """Create or update a file on the given branch.
 
     Returns True if the file was written, False if content was unchanged.
@@ -189,7 +189,7 @@ def _upsert_file(repo: "Repository", branch: str, change: FileChange) -> bool:
     return True
 
 
-def _delete_branch(repo: "Repository", branch_name: str) -> None:
+def _delete_branch(repo: Repository, branch_name: str) -> None:
     """Delete a branch ref, ignoring errors if it doesn't exist."""
     try:
         ref = repo.get_git_ref(f"heads/{branch_name}")
@@ -199,7 +199,7 @@ def _delete_branch(repo: "Repository", branch_name: str) -> None:
         print(f"[dependadocs] Warning: could not delete branch '{branch_name}': {exc}")
 
 
-def _ensure_label(repo: "Repository", name: str, color: str, description: str) -> None:
+def _ensure_label(repo: Repository, name: str, color: str, description: str) -> None:
     """Create the label if it doesn't exist already."""
     try:
         repo.get_label(name)

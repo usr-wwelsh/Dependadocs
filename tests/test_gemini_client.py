@@ -1,12 +1,13 @@
 """Unit tests for gemini_client.py."""
 
-import sys
-import os
 import json
+import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 import gemini_client

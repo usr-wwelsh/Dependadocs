@@ -1,17 +1,17 @@
 """Unit tests for main.py."""
 
-import sys
-import os
 import json
+import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 import main
 from gemini_client import AnalysisResult, FileChange
-
 
 BASE_ENV = {
     "GITHUB_REPOSITORY": "owner/repo",
@@ -321,7 +321,7 @@ class TestScheduledDocsAudit:
 
     def test_runs_audit_when_no_diff(self, tmp_path):
         env = self._base_env(tmp_path)
-        mock_gh, mock_repo = self._mock_gh()
+        mock_gh, _mock_repo = self._mock_gh()
         audit_result = AnalysisResult(
             updates_needed=True,
             summary="stale docs",
@@ -543,9 +543,8 @@ class TestReadmeFallback:
 class TestMainErrorHandling:
     def test_dies_when_event_path_missing(self):
         env = {**BASE_ENV, "GITHUB_EVENT_PATH": ""}
-        with patch.dict(os.environ, env):
-            with pytest.raises(SystemExit) as exc_info:
-                main.main()
+        with patch.dict(os.environ, env), pytest.raises(SystemExit) as exc_info:
+            main.main()
         assert exc_info.value.code == 1
 
     def test_dies_when_unsupported_event(self, tmp_path):
@@ -560,17 +559,15 @@ class TestMainErrorHandling:
     def test_dies_when_github_token_missing(self, tmp_path):
         event_path = _write_event(str(tmp_path), _make_pr_event())
         env = {**BASE_ENV, "GITHUB_EVENT_PATH": event_path, "GITHUB_TOKEN": ""}
-        with patch.dict(os.environ, env):
-            with pytest.raises(SystemExit) as exc_info:
-                main.main()
+        with patch.dict(os.environ, env), pytest.raises(SystemExit) as exc_info:
+            main.main()
         assert exc_info.value.code == 1
 
     def test_dies_when_gemini_key_missing(self, tmp_path):
         event_path = _write_event(str(tmp_path), _make_pr_event())
         env = {**BASE_ENV, "GITHUB_EVENT_PATH": event_path, "GEMINI_API_KEY": ""}
-        with patch.dict(os.environ, env):
-            with pytest.raises(SystemExit) as exc_info:
-                main.main()
+        with patch.dict(os.environ, env), pytest.raises(SystemExit) as exc_info:
+            main.main()
         assert exc_info.value.code == 1
 
     def test_dies_when_gemini_raises(self, tmp_path):

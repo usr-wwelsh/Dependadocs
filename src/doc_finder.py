@@ -15,7 +15,7 @@ MAX_FILES = 30
 MAX_TOTAL_BYTES = 200 * 1024  # 200 KB
 
 
-def find_docs(repo: "Repository", docs_path: str = "", diff: str = "") -> list[dict]:
+def find_docs(repo: Repository, docs_path: str = "", diff: str = "") -> list[dict]:
     """Return a list of {path, content} dicts for doc files in the repo.
 
     Args:
@@ -107,7 +107,7 @@ def _matches_ignore(path: str, patterns: list[str]) -> bool:
 
 
 def _collect_files(
-    repo: "Repository", root: str, ignore_patterns: list[str] | None = None
+    repo: Repository, root: str, ignore_patterns: list[str] | None = None
 ) -> list[str]:
     """Recursively collect doc file paths under root."""
     results: list[str] = []
@@ -151,7 +151,7 @@ def _extract_changed_paths(diff: str) -> set[str]:
     """Parse unified diff and return the set of changed file paths."""
     paths: set[str] = set()
     for line in diff.splitlines():
-        if line.startswith("--- a/") or line.startswith("+++ b/"):
+        if line.startswith(("--- a/", "+++ b/")):
             path = line[6:]
             if path != "/dev/null":
                 paths.add(path)
