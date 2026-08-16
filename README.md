@@ -1,5 +1,7 @@
 # Dependadocs
 
+[![Read about the commits](https://img.shields.io/badge/commits-code%20blog-1a1a1a?style=flat-square)](https://wwel.sh/digest.html?repo=Dependadocs)
+
 **Dependabot for your documentation.** Dependadocs runs inside GitHub Actions and automatically opens a PR with AI-generated documentation updates whenever a code PR changes something that makes your docs stale.
 
 - **Zero infrastructure** — pure GitHub Actions, no servers
