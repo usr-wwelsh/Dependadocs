@@ -1,5 +1,5 @@
-google-genai>=1.0.0
-PyGithub>=2.3.0
+google-genai>=3.4.0
+PyGithub>=2.10.0
 pytest
 pytest-mock
-ruff==0.16.3
+ruff==0.17.5
